@@ -1,40 +1,52 @@
 package ee.ooloros.hibernate.demo1321.shared;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.Optional;
 
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.authentication.RememberMeAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import jakarta.annotation.Nonnull;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 
-@Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
-public class AuthRequestFilter  extends OncePerRequestFilter {
-//    private AdminContextService adminContextService;
+@RequiredArgsConstructor
+public class AuthRequestFilter extends OncePerRequestFilter {
+
+    private final AdminContextService adminContextService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
-        List<GrantedAuthority> authorities = AuthorityUtils.createAuthorityList("CashAtCageApi::Login");
-        var authentication = new UsernamePasswordAuthenticationToken("test@test.com", "test", authorities);
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        System.out.println("dsasdsd");
-        try {
+    protected void doFilterInternal(
+            @Nonnull HttpServletRequest request,
+            @Nonnull HttpServletResponse response,
+            @Nonnull FilterChain filterChain
+    ) throws ServletException, IOException {
+        if (request.getCookies() == null) {
             filterChain.doFilter(request, response);
-
-        }catch (Exception e) {
-            e.printStackTrace();
+            return;
         }
+        var sessionCookie = Arrays.stream(request.getCookies())
+                .filter(cookie -> Objects.equals(cookie.getName(), "BOSESSIONID"))
+                .findFirst();
+        if (sessionCookie.isEmpty()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        Optional.ofNullable(adminContextService.resolveRole(sessionCookie.get().getValue(), false))
+                .map(admin -> new RememberMeAuthenticationToken(admin.sessionToken(), admin, admin.roles().stream()
+                        .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                        .toList()))
+                .ifPresent(token -> SecurityContextHolder.getContextHolderStrategy()
+                        .getContext().setAuthentication(token));
+
+        filterChain.doFilter(request, response);
     }
 }
