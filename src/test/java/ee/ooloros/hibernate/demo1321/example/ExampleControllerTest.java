@@ -69,6 +69,14 @@ class ExampleControllerTest extends BaseControllerTest {
                     .andExpect(status().isForbidden());
         }
 
+        @Test
+        void shouldReturnForbidden_whenSessionNotFound() throws Exception {
+            var request = get("/examples/{name}", EXAMPLE_NAME)
+                    .cookie(new Cookie("BOSESSIONID", EXAMPLE_SESSION_ID));
+            mockMvc.perform(request)
+                    .andExpect(status().isForbidden());
+        }
+
     }
 
     @Nested
